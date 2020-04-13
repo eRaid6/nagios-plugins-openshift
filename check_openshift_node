@@ -92,7 +92,20 @@ check_condition() {
 check_condition Ready true
 check_condition DiskPressure false
 check_condition MemoryPressure false
-check_condition OutOfDisk false
+
+# Get Kubernetes version
+get_kube_ver
+
+# Depending on the Kubernetes version include additional Node info
+if [[ ${kube_major_ver} -ge 1 ]]; then
+  if [[ ${kube_minor_ver} -le 11 ]]; then
+    # OpenShift 3.x used up to Kubernetes 1.11
+    check_condition OutOfDisk false
+  elif [[ ${kube_minor_ver} -ge 12 ]]; then
+    # OpenShift 4.x starts at Kubernetes 1.12
+    check_condition PIDPressure false
+  fi
+fi
 
 finish "$exit_status" \
   "$(join_args ', ' ${output[@]+"${output[@]}"})" \

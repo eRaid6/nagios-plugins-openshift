@@ -5,7 +5,14 @@ readonly state_warning=1
 readonly state_critical=2
 readonly state_unknown=3
 
-readonly OPENSHIFT_CLIENT_BINARY=/usr/bin/oc
+# Set `oc` location
+# dynamically locate `oc` with which, but if that fails fall back
+# to static location of /usr/bin/oc
+if which oc >> /dev/null 2>&1; then
+  readonly OPENSHIFT_CLIENT_BINARY=$(which oc)
+else
+  readonly OPENSHIFT_CLIENT_BINARY=/usr/bin/oc
+fi
 
 #
 # Print arguments joined by delimiter
@@ -167,6 +174,31 @@ finish() {
 
   echo "$prefix${output:+ $output}${metrics:+ | $metrics}"
   exit "$exit_status"
+}
+
+#
+# Determine Kubernetes version
+#
+get_kube_ver() {
+  # oc >= 4 has `oc version -o json` however oc <= 3 does not
+  # so we need to parse stdout to figure out what version is being used
+  oc_ver_out=$(run_oc "$opt_cfgfile" version)
+  if echo "${oc_ver_out}" | grep -q 'kubernetes'; then
+    # OpenShift 3 formatting
+    kube_major_ver=$(echo "${oc_ver_out}" | grep 'kubernetes' | cut -d' ' -f 2 | cut -d'v' -f 2 | cut -d'+' -f 1 | tail -n1 | cut -d'.' -f 1)
+    export kube_major_ver
+    kube_minor_ver=$(echo "${oc_ver_out}" | grep 'kubernetes' | cut -d' ' -f 2 | cut -d'v' -f 2 | cut -d'+' -f 1 | tail -n1 | cut -d'.' -f 2)
+    export kube_minor_ver
+  elif echo "${oc_ver_out}" | grep -q 'Kubernetes Version'; then
+    # OpenShift 4 formatting
+    kube_major_ver=$(echo "${oc_ver_out}" | grep 'Kubernetes' | cut -d' ' -f 3 | cut -d'v' -f 2 | cut -d'+' -f 1 | tail -n1 | cut -d'.' -f 1)
+    export kube_major_ver
+    kube_minor_ver=$(echo "${oc_ver_out}" | grep 'Kubernetes' | cut -d' ' -f 3 | cut -d'v' -f 2 | cut -d'+' -f 1 | tail -n1 | cut -d'.' -f 2)
+    export kube_minor_ver
+  else
+    output+=( "Could not determine Kubernetes version" )
+    exit_status=$(merge_status "$exit_status" "$state_critical")
+  fi
 }
 
 # vim: set sw=2 sts=2 et :
